@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import * as wasm from "minijinja-playground";
 
 import AceEditor from "react-ace";
@@ -8,30 +8,46 @@ import "ace-builds/src-noconflict/theme-cobalt";
 import "ace-builds/src-noconflict/ext-language_tools";
 import "ace-builds/src-noconflict/keybinding-vim";
 
+import "./style.css";
+
 wasm.set_panic_hook();
 
 const FONT_SIZE = 13;
 const TAB_SIZE = 2;
 const KEYBOARD_HANDLER = undefined;
 const DEFAULT_CONTEXT = {
-  name: "World",
-  nav: [
-    { href: "/", title: "Index" },
-    { href: "/help", title: "Help" },
-    { href: "/about", title: "About" },
-  ],
+  customer: {
+    name: "ACME S.R.L.",
+    municipality: "Milano",
+    address: "Via Roma 1",
+    vat_numer: "01234567890",
+    legal_person_fullname: "Mario Rossi",
+    legal_person_vat_number: "RSSMRA80A01H501Z",
+  },
+  supplier: {
+    name: "Fornitore S.R.L.",
+    municipality: "Torino",
+    address: "Via Milano 2",
+    vat_numer: "09876543210",
+    legal_person_fullname: "Giuseppe Verdi",
+    legal_person_vat_number: "VRDGPP80A01H501Z",
+  },
 };
 const DEFAULT_TEMPLATE = `\
-<nav>
-  <ul>
-    {%- for item in nav %}
-    <li><a href="{{ item.href }}">{{ item.title }}</a>
-    {%- endfor %}
-  </ul>
-</nav>
-<main>
-  Hello {{ name }}!
-</main>
+<link rel="stylesheet" href="/style.css" crossorigin="anonymous">
+<script src="/selection.js"></script>
+<h2>CONTRATTO DI GESTIONE E MANUTENZIONE
+DI IMPIANTI DI ACCUMULO STAND ALONE</h2>
+
+<p>tra</p>
+<p>{{ customer.name }}, con sede legale in {{ customer.municipality }}, {{ customer.address }} , C.F. e P.I.  {{ customer.vat_numer }}, in persona del legale rappresentante {{ customer.legal_person_fullname }}, cod. fis. {{ customer.legal_person_vat_number }} (di seguito “Committente”)</p>
+<p>e</p>
+<p>{{ supplier.name }}, con sede legale in {{ supplier.municipality }}, {{ supplier.address }} , C.F. e P.I.  {{ supplier.vat_numer }}, in persona del legale rappresentante {{ supplier.legal_person_fullname }}, cod. fis. {{ supplier.legal_person_vat_number }} (di seguito Fornitore)</p>
+<p>Di seguito congiuntamente le “Parti” e singolarmente la “Parte”</p>
+
+<h2>PREMESSE</h2>
+<p>La Committente è proprietaria dell’impianto [●] sito nel Comune di [●] (di seguito l’”Impianto”), costituito da [●]/meglio identificato nell’Allegato B.</p>
+
 `;
 
 function getSetting(key, defaultValue) {
@@ -64,6 +80,7 @@ const Editor = ({
   pyCompat,
   onTemplateChange,
   onTemplateContextChange,
+  onTemplateSelection,
   onSetMode,
   onSetPyCompat,
   outputHeight,
@@ -122,6 +139,16 @@ const Editor = ({
           onChange={(newValue) => {
             onTemplateChange(newValue);
           }}
+          onSelectionChange={(selection) => {
+                  const x = {
+                    start_line: selection.anchor.row,
+                    start_col: selection.anchor.column,
+                    end_line: selection.cursor.row,
+                    end_col: selection.cursor.column,
+                  };
+                  onTemplateSelection(x);
+                }
+            }
           keyboardHandler={KEYBOARD_HANDLER}
           width="100%"
           height="100%"
@@ -212,6 +239,7 @@ const OUTPUT_FRAME_STYLES = {
   padding: "0",
   width: "100%",
   height: "100%",
+  textFamily: "Verdana, sans-serif",
 };
 
 const Error = ({ error }) => {
@@ -249,9 +277,12 @@ const RenderOutput = ({ mode, html, pyCompat, template, templateContext }) => {
       <div style={OUTPUT_FRAME_WRAPPER_STYLES}>
         <iframe
           style={OUTPUT_FRAME_STYLES}
-          sandbox="allow-same-origin"
+          sandbox="allow-same-origin allow-scripts"
           srcDoc={(result || "") + ""}
-        />
+          title="Rendered HTML"
+          id="rendered-html"
+        >
+        </iframe>
       </div>
     );
   } else {
@@ -354,8 +385,21 @@ const InstructionsOutput = ({ template }) => {
   );
 };
 
-const Output = ({ mode, pyCompat, template, templateContext, height }) => {
-  const [outputMode, setOutputMode] = useState("render");
+const Output = ({ mode, pyCompat, template, templateContext, templateSelection, height }) => {
+  const [outputMode, setOutputMode] = useState("render-html");
+
+  var content = template;
+  if (outputMode === "render-html" && content) {
+    if (templateSelection) {
+      var lines = content.split("\n");
+      const sub = lines[templateSelection.start_line].substring(templateSelection.start_col, templateSelection.end_col);
+      const firstPart = lines[templateSelection.start_line].substring(0, templateSelection.start_col);
+      const lastPart = lines[templateSelection.end_line].substring(templateSelection.end_col);
+      lines[templateSelection.start_line] = firstPart +`<b>`+ sub +`</b>`+ lastPart;
+      content = lines.join("\n");
+    }
+  }
+
   return (
     <div
       style={{
@@ -374,8 +418,8 @@ const Output = ({ mode, pyCompat, template, templateContext, height }) => {
         value={outputMode}
         onChange={(evt) => setOutputMode(evt.target.value)}
       >
-        <option value="render">Rendered Text</option>
         <option value="render-html">Rendered HTML</option>
+        <option value="render">Rendered Text</option>
         <option value="tokens">Tokens</option>
         <option value="ast">AST</option>
         <option value="instructions">Instructions</option>
@@ -385,7 +429,7 @@ const Output = ({ mode, pyCompat, template, templateContext, height }) => {
           mode={mode}
           html={outputMode == "render-html"}
           pyCompat={pyCompat}
-          template={template}
+          template={content}
           templateContext={templateContext}
         />
       )}
@@ -402,6 +446,7 @@ export function App({}) {
   const [mode, setMode] = useState("html");
   const [pyCompat, setPyCompat] = useState(false);
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
+  const [editorSelection, setEditorSelection] = useState(null);
   const [templateContext, setTemplateContext] = useState(() =>
     JSON.stringify(DEFAULT_CONTEXT, null, 2)
   );
@@ -412,6 +457,15 @@ export function App({}) {
     getSetting("outputHeight", 200)
   );
 
+  // register on window.onmessage event
+  window.addEventListener("message", (event) => {
+    if (event.data.type === "selection") {
+      const { text, rect } = event.data;
+      console.log("Selected text:", text);
+      console.log("Selection rect:", rect);
+    }
+  });
+  console.log("editorSelection", editorSelection);
   return (
     <div
       onMouseMove={(e) => {
@@ -432,6 +486,7 @@ export function App({}) {
         templateContext={templateContext}
         onTemplateChange={setTemplate}
         onTemplateContextChange={setTemplateContext}
+        onTemplateSelection={setEditorSelection}
         mode={mode}
         onSetMode={setMode}
         pyCompat={pyCompat}
@@ -455,6 +510,7 @@ export function App({}) {
         pyCompat={pyCompat}
         template={template}
         templateContext={templateContext}
+        templateSelection={editorSelection}
         height={outputHeight}
       />
     </div>
