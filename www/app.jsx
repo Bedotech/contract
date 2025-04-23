@@ -8,8 +8,6 @@ import "ace-builds/src-noconflict/theme-cobalt";
 import "ace-builds/src-noconflict/ext-language_tools";
 import "ace-builds/src-noconflict/keybinding-vim";
 
-import "./style.css";
-
 wasm.set_panic_hook();
 
 const FONT_SIZE = 13;
@@ -81,7 +79,6 @@ const Editor = ({
   onTemplateChange,
   onTemplateContextChange,
   onTemplateSelection,
-  onSetMode,
   onSetPyCompat,
   outputHeight,
 }) => {
@@ -123,11 +120,6 @@ const Editor = ({
           >
             <option value="pycompat">pycompat enabled</option>
             <option value="normal">pycompat disabled</option>
-          </select>
-          <select value={mode} onChange={(evt) => onSetMode(evt.target.value)}>
-            <option value="html">.html</option>
-            <option value="json">.json</option>
-            <option value="text">.txt</option>
           </select>
         </div>
         <AceEditor
@@ -256,20 +248,25 @@ const Error = ({ error }) => {
   );
 };
 
-const RenderOutput = ({ mode, html, pyCompat, template, templateContext }) => {
+const RenderOutput = ({ mode, html, renderTemplate, pyCompat, template, templateContext }) => {
   const templateName = `template.${mode}`;
   let result;
-  try {
-    result = wasm
-      .create_env(
-        {
-          [templateName]: template,
-        },
-        pyCompat
-      )
-      .render(templateName, JSON.parse(templateContext));
-  } catch (err) {
-    return <Error error={err} />;
+  if (renderTemplate) {
+    result = template;
+  }
+  else {
+    try {
+      result = wasm
+        .create_env(
+          {
+            [templateName]: template,
+          },
+          pyCompat
+        )
+        .render(templateName, JSON.parse(templateContext));
+    } catch (err) {
+      return <Error error={err} />;
+    }
   }
 
   if (html) {
@@ -419,15 +416,17 @@ const Output = ({ mode, pyCompat, template, templateContext, templateSelection, 
         onChange={(evt) => setOutputMode(evt.target.value)}
       >
         <option value="render-html">Rendered HTML</option>
-        <option value="render">Rendered Text</option>
+        <option value="render-template">Render Template</option>
+        {/* <option value="render">Rendered Text</option>
         <option value="tokens">Tokens</option>
         <option value="ast">AST</option>
-        <option value="instructions">Instructions</option>
+        <option value="instructions">Instructions</option> */}
       </select>
-      {(outputMode === "render" || outputMode === "render-html") && (
+      {(outputMode === "render" || outputMode === "render-html" || outputMode == "render-template") && (
         <RenderOutput
           mode={mode}
-          html={outputMode == "render-html"}
+          html={outputMode == "render-html" || outputMode == "render-template"}
+          renderTemplate={outputMode == "render-template"}
           pyCompat={pyCompat}
           template={content}
           templateContext={templateContext}
@@ -488,7 +487,6 @@ export function App({}) {
         onTemplateContextChange={setTemplateContext}
         onTemplateSelection={setEditorSelection}
         mode={mode}
-        onSetMode={setMode}
         pyCompat={pyCompat}
         onSetPyCompat={setPyCompat}
         outputHeight={outputHeight}
