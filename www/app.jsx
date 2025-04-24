@@ -31,9 +31,13 @@ const DEFAULT_CONTEXT = {
     legal_person_vat_number: "VRDGPP80A01H501Z",
   },
 };
-const DEFAULT_TEMPLATE = `\
+
+const DEFAULT_INJECT = `\
 <link rel="stylesheet" href="/style.css" crossorigin="anonymous">
 <script src="/selection.js"></script>
+`;
+
+const DEFAULT_TEMPLATE = `\
 <h2>CONTRATTO DI GESTIONE E MANUTENZIONE
 DI IMPIANTI DI ACCUMULO STAND ALONE</h2>
 
@@ -45,7 +49,11 @@ DI IMPIANTI DI ACCUMULO STAND ALONE</h2>
 
 <h2>PREMESSE</h2>
 <p>La Committente è proprietaria dell’impianto [●] sito nel Comune di [●] (di seguito l’”Impianto”), costituito da [●]/meglio identificato nell’Allegato B.</p>
-
+<ul>
+{% for i in range(1, 5) %}
+    <li> {{ i }}. {{ customer.name }} </li>
+{% endfor %}
+</ul>
 `;
 
 function getSetting(key, defaultValue) {
@@ -138,6 +146,11 @@ const Editor = ({
                     end_line: selection.cursor.row,
                     end_col: selection.cursor.column,
                   };
+                  if (selection.anchor.row == selection.cursor.row &&
+                      selection.anchor.column == selection.cursor.column) {
+                        onTemplateSelection(null);
+                        return;
+                    }
                   onTemplateSelection(x);
                 }
             }
@@ -248,6 +261,38 @@ const Error = ({ error }) => {
   );
 };
 
+// This function is used to parse the AST and extract the inner elements
+// and their children. It is used to display the AST in a more readable format.
+function parseAst(ast) {
+  let result = [];
+
+  if (Object.hasOwn(ast, 'inner')) {
+    result.push(ast.inner[1]);
+
+    if (Object.hasOwn(ast.inner[0],'children')) {
+      ast.inner[0].children.forEach((child) => {
+        result = result.concat(parseAst(child));
+      });
+    }
+  }
+  return result;
+}
+
+function injectText(template, positions) {
+  let placeholder = Array.from(`🍆`);
+  let counter = 0;
+  var text = Array.from(template);
+
+  for (const p of positions) {
+
+    text = text.slice(0, p.start_offset + counter).concat(placeholder).concat(text.slice(p.start_offset + counter));
+    counter += placeholder.length;
+  }
+  template = text.join("");
+  console.log("template", template);
+  return template;
+}
+
 const RenderOutput = ({ mode, html, renderTemplate, pyCompat, template, templateContext }) => {
   const templateName = `template.${mode}`;
   let result;
@@ -268,7 +313,16 @@ const RenderOutput = ({ mode, html, renderTemplate, pyCompat, template, template
       return <Error error={err} />;
     }
   }
+  let ast;
+  try {
+    ast = wasm.parse(template);
+    let positions = parseAst(ast);
+    template = injectText(template, positions);
+  } catch (err) {
+    return <Error error={err} />;
+  }
 
+  result = DEFAULT_INJECT + result;
   if (html) {
     return (
       <div style={OUTPUT_FRAME_WRAPPER_STYLES}>
@@ -417,10 +471,10 @@ const Output = ({ mode, pyCompat, template, templateContext, templateSelection, 
       >
         <option value="render-html">Rendered HTML</option>
         <option value="render-template">Render Template</option>
-        {/* <option value="render">Rendered Text</option>
+        <option value="render">Rendered Text</option>
         <option value="tokens">Tokens</option>
         <option value="ast">AST</option>
-        <option value="instructions">Instructions</option> */}
+        <option value="instructions">Instructions</option>
       </select>
       {(outputMode === "render" || outputMode === "render-html" || outputMode == "render-template") && (
         <RenderOutput
