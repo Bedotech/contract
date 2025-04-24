@@ -286,7 +286,7 @@ function parseAst(ast) {
 
 
 function injectText(template, positions) {
-  let placeholder = Array.from("🍆"); // Array di caratteri da inserire
+  let placeholder = Array.from("🍆");
   let counter = 0;
   const encoder = new TextEncoder();
 
