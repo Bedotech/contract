@@ -166,6 +166,9 @@ const Editor = ({
           value={template}
           tabSize={TAB_SIZE}
           editorProps={{ $blockScrolling: true }}
+          setOptions={{
+            useWorker: false
+          }}
         />
       </div>
       <div
@@ -212,6 +215,9 @@ const Editor = ({
           value={templateContext}
           tabSize={TAB_SIZE}
           editorProps={{ $blockScrolling: true }}
+          setOptions={{
+            useWorker: false
+          }}
         />
       </div>
     </div>
@@ -278,21 +284,33 @@ function parseAst(ast) {
   return result;
 }
 
+
 function injectText(template, positions) {
-  let placeholder = Array.from(`🍆`);
+  let placeholder = Array.from("🍆"); // Array di caratteri da inserire
   let counter = 0;
-  var text = Array.from(template);
+  const encoder = new TextEncoder();
+
+  let byteArray = encoder.encode(template);
+  let text = [...byteArray];
 
   for (const p of positions) {
+    const placeholderBytes = encoder.encode(placeholder[0]);
 
-    text = text.slice(0, p.start_offset + counter).concat(placeholder).concat(text.slice(p.start_offset + counter));
-    counter += placeholder.length;
+    text = [
+      ...text.slice(0, p.start_offset + counter),
+      ...placeholderBytes,
+      ...text.slice(p.start_offset + counter),
+    ];
+
+    counter += placeholderBytes.length;
   }
-  template = text.join("");
+
+  const decoder = new TextDecoder("utf-8");
+  template = decoder.decode(new Uint8Array(text));
+
   console.log("template", template);
   return template;
 }
-
 const RenderOutput = ({ mode, html, renderTemplate, pyCompat, template, templateContext }) => {
   const templateName = `template.${mode}`;
   let result;
