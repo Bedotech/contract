@@ -273,19 +273,44 @@ function parseAst(ast) {
   let result = [];
 
   if (Object.hasOwn(ast, 'inner')) {
-    result.push(ast.inner[1]);
+
+    if (Object.hasOwn(ast, 'stmt')) {
+      if (ast.stmt === "ForLoop") {
+        console.log("ForLoop", ast);
+        ast.inner[0].body.forEach((child) => {
+          result = result.concat(parseAst(child));
+        }
+        );
+      }
+      // return result;
+    }
 
     if (Object.hasOwn(ast.inner[0],'children')) {
       ast.inner[0].children.forEach((child) => {
         result = result.concat(parseAst(child));
       });
     }
+    if (Object.hasOwn(ast, 'stmt')) {
+      if (ast.stmt === "ForLoop") {
+        return result;
+      }
+    }
+    result.push(ast.inner[1]);
   }
   return result;
 }
 
+function getPlaceholderBytes(line, col) {
+  const encoder = new TextEncoder();
+  const placeholder = `<div class="placeholder" data-line="${line}" data-col="${col}"/>`;
+  // const placeholder = `🍆`;
+  return encoder.encode(placeholder);
+}
 
 function injectText(template, positions) {
+  // Sort the positions by start_offset
+  positions.sort((a, b) => a.start_offset - b.start_offset);
+
   let placeholder = Array.from("🍆");
   let counter = 0;
   const encoder = new TextEncoder();
@@ -294,7 +319,7 @@ function injectText(template, positions) {
   let text = [...byteArray];
 
   for (const p of positions) {
-    const placeholderBytes = encoder.encode(placeholder[0]);
+    const placeholderBytes = getPlaceholderBytes(p.start_line, p.start_col);
 
     text = [
       ...text.slice(0, p.start_offset + counter),
@@ -311,6 +336,7 @@ function injectText(template, positions) {
   console.log("template", template);
   return template;
 }
+
 const RenderOutput = ({ mode, html, renderTemplate, pyCompat, template, templateContext }) => {
   const templateName = `template.${mode}`;
   let result;
@@ -331,6 +357,7 @@ const RenderOutput = ({ mode, html, renderTemplate, pyCompat, template, template
       return <Error error={err} />;
     }
   }
+
   let ast;
   try {
     ast = wasm.parse(template);
